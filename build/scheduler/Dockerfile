@@ -18,6 +18,7 @@ WORKDIR /go/src/sigs.k8s.io/scheduler-plugins
 COPY . .
 ARG ARCH
 ARG RELEASE_VERSION
+ENV GOPROXY https://proxy.golang.com.cn,direct
 RUN RELEASE_VERSION=${RELEASE_VERSION} make build-scheduler.$ARCH
 
 FROM $ARCH/alpine:3.12
