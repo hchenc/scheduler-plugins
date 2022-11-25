@@ -143,3 +143,17 @@ type NodeResourceTopologyMatchArgs struct {
 	// Namespaces to be considered by NodeResourceTopologyMatch plugin
 	Namespaces []string
 }
+
+// +k8s:deepcopy-gen=true
+// +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
+
+// SeckillArgs holds arguments used to configure the Seckill plugin
+type SeckillArgs struct {
+	metav1.TypeMeta
+
+	// KubeConfigPath is the path of kubeconfig.
+	KubeConfigPath string
+
+	// MasterOverride is the url of api-server
+	MasterOverride string
+}

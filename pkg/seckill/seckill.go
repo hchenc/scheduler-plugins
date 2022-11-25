@@ -3,9 +3,11 @@ package seckill
 import (
 	"context"
 	"fmt"
+	gochache "github.com/patrickmn/go-cache"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
+	"sigs.k8s.io/scheduler-plugins/pkg/apis/config"
 	"strings"
 	"time"
 )
@@ -30,17 +32,8 @@ var (
 //}
 
 type Seckill struct {
-	handler framework.Handle
-}
-
-func (s *Seckill) Reserve(ctx context.Context, state *framework.CycleState, p *corev1.Pod, nodeName string) *framework.Status {
-	return nil
-}
-
-func (s *Seckill) Unreserve(ctx context.Context, state *framework.CycleState, p *corev1.Pod, nodeName string) {
-	s.handler.IterateOverWaitingPods(func(waitingPod framework.WaitingPod) {
-		waitingPod.Allow(p.Name)
-	})
+	handler  framework.Handle
+	podCache *gochache.Cache
 }
 
 // order: redis master -> redis slave -> seckill-app
@@ -51,27 +44,57 @@ func (s *Seckill) Permit(ctx context.Context, state *framework.CycleState, p *co
 	}
 	//slave second
 	if strings.Contains(p.Name, "seckill-slave") && p.Labels["role"] == "slave" {
-		return framework.NewStatus(framework.Wait, "should wait"), 30 * time.Second
+		_, ok := s.podCache.Get(p.Name)
+		if !ok {
+			s.podCache.Set(p.Name, "pod", 0)
+			return framework.NewStatus(framework.Wait, "should wait"), 15 * time.Second
+		}
+		return nil, 0
 	}
 
 	if strings.Contains(p.Name, "seckill-mysql") {
-		return framework.NewStatus(framework.Wait, "should wait"), 45 * time.Second
+		_, ok := s.podCache.Get(p.Name)
+		if !ok {
+			s.podCache.Set(p.Name, "pod", 0)
+			return framework.NewStatus(framework.Wait, "should wait"), 45 * time.Second
+		}
+		return nil, 0
 	}
 
 	if strings.Contains(p.Name, "seckill-statis") {
-		return framework.NewStatus(framework.Wait, "should wait"), 45 * time.Second
+		_, ok := s.podCache.Get(p.Name)
+		if !ok {
+			s.podCache.Set(p.Name, "pod", 0)
+			return framework.NewStatus(framework.Wait, "should wait"), 45 * time.Second
+		}
+		return nil, 0
 	}
 
-	if strings.Contains(p.Name, "seckill-app") {
-		return framework.NewStatus(framework.Wait, "should wait"), 60 * time.Second
-	}
+	//if strings.Contains(p.Name, "seckill-app") {
+	//	_, ok := s.podCache.Get(p.Name)
+	//	if !ok {
+	//		s.podCache.Set(p.Name, "pod", 0)
+	//		return framework.NewStatus(framework.Wait, "should wait"), 7 * time.Second
+	//	}
+	//	return nil, 0
+	//}
 
 	if strings.Contains(p.Name, "stress-boss") {
-		return framework.NewStatus(framework.Wait, "should wait"), 100 * time.Second
+		_, ok := s.podCache.Get(p.Name)
+		if !ok {
+			s.podCache.Set(p.Name, "pod", 0)
+			return framework.NewStatus(framework.Wait, "should wait"), 100 * time.Second
+		}
+		return nil, 0
 	}
 
 	if strings.Contains(p.Name, "stress-worker") {
-		return framework.NewStatus(framework.Wait, "should wait"), 120 * time.Second
+		_, ok := s.podCache.Get(p.Name)
+		if !ok {
+			s.podCache.Set(p.Name, "pod", 0)
+			return framework.NewStatus(framework.Wait, "should wait"), 120 * time.Second
+		}
+		return nil, 0
 	}
 
 	return nil, 0
@@ -83,10 +106,15 @@ func (s *Seckill) Name() string {
 }
 
 func New(obj runtime.Object, h framework.Handle) (framework.Plugin, error) {
-	//args, ok := obj.(SeckillSchedulingArgs)
+	args, ok := obj.(*config.SeckillArgs)
+	if !ok {
+		fmt.Println(args)
+	}
 
 	fmt.Println("Regis:**********: ")
-	return &Seckill{
+	s := &Seckill{
 		h,
-	}, nil
+		gochache.New(3*time.Minute, 3*time.Minute),
+	}
+	return s, nil
 }
